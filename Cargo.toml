@@ -78,3 +78,19 @@ profile-with-puffin = ["profiling/profile-with-puffin", "puffin_http"]
 profile-with-tracy = ["profiling/profile-with-tracy"]
 profile-with-tracy-mem = ["profile-with-tracy"]
 renderer_sync = []
+
+[dependencies.skia-safe]
+version = "0.62"
+# this set of features is required for enabling to use the pre-built
+# binaries of skia-safe
+features = [
+  "binary-cache",
+  "egl",
+  "gl",
+  "svg",
+  "textlayout",
+  "vulkan",
+  "wayland",
+  "webp",
+  "x11",
+]

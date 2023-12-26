@@ -13,6 +13,7 @@ pub mod focus;
 pub mod input_handler;
 pub mod render;
 pub mod shell;
+pub mod skia_renderer;
 pub mod state;
 #[cfg(feature = "udev")]
 pub mod udev;

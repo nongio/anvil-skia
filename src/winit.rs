@@ -20,7 +20,6 @@ use smithay::{
         renderer::{
             damage::{Error as OutputDamageTrackerError, OutputDamageTracker},
             element::AsRenderElements,
-            gles::{GlesRenderer, GlesTexture},
             ImportDma, ImportMemWl,
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
@@ -45,13 +44,16 @@ use smithay::{
 };
 use tracing::{error, info, warn};
 
-use crate::state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData};
-use crate::{drawing::*, render::*};
+use crate::{
+    drawing::*, render::*,
+    skia_renderer::{SkiaRenderer, SkiaTexture},
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData},
+};
 
 pub const OUTPUT_NAME: &str = "winit";
 
 pub struct WinitData {
-    backend: WinitGraphicsBackend<GlesRenderer>,
+    backend: WinitGraphicsBackend<SkiaRenderer>,
     damage_tracker: OutputDamageTracker,
     dmabuf_state: (DmabufState, DmabufGlobal, Option<DmabufFeedback>),
     full_redraw: u8,
@@ -96,7 +98,7 @@ pub fn run_winit() {
     let mut display_handle = display.handle();
 
     #[cfg_attr(not(feature = "egl"), allow(unused_mut))]
-    let (mut backend, mut winit) = match winit::init::<GlesRenderer>() {
+    let (mut backend, mut winit) = match winit::init::<SkiaRenderer>() {
         Ok(ret) => ret,
         Err(err) => {
             error!("Failed to initialize Winit backend: {}", err);
@@ -214,7 +216,7 @@ pub fn run_winit() {
 
     info!("Initialization completed, starting the main loop.");
 
-    let mut pointer_element = PointerElement::<GlesTexture>::default();
+    let mut pointer_element = PointerElement::<SkiaTexture>::default();
 
     while state.running.load(Ordering::SeqCst) {
         let status = winit.dispatch_new_events(|event| match event {
@@ -318,14 +320,14 @@ pub fn run_winit() {
 
                 let renderer = backend.renderer();
 
-                let mut elements = Vec::<CustomRenderElements<GlesRenderer>>::new();
+                let mut elements = Vec::<CustomRenderElements<SkiaRenderer>>::new();
 
                 elements.extend(pointer_element.render_elements(renderer, cursor_pos_scaled, scale, 1.0));
 
                 // draw the dnd icon if any
                 if let Some(surface) = dnd_icon {
                     if surface.alive() {
-                        elements.extend(AsRenderElements::<GlesRenderer>::render_elements(
+                        elements.extend(AsRenderElements::<SkiaRenderer>::render_elements(
                             &smithay::desktop::space::SurfaceTree::from_surface(surface),
                             renderer,
                             cursor_pos_scaled,

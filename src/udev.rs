@@ -14,6 +14,7 @@ use crate::{
     drawing::*,
     render::*,
     shell::WindowElement,
+    skia_renderer::{SkiaRenderer, SkiaGLesFbo},
     state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData},
 };
 #[cfg(feature = "renderer_sync")]
@@ -39,7 +40,6 @@ use smithay::{
         renderer::{
             damage::{Error as OutputDamageTrackerError, OutputDamageTracker},
             element::{texture::TextureBuffer, AsRenderElements, RenderElement, RenderElementStates},
-            gles::{GlesRenderer, GlesTexture},
             multigpu::{gbm::GbmGlesBackend, GpuManager, MultiRenderer, MultiTexture},
             sync::SyncPoint,
             Bind, DebugFlags, ExportMem, ImportDma, ImportMemWl, Offscreen, Renderer,
@@ -109,7 +109,7 @@ const SUPPORTED_FORMATS: &[Fourcc] = &[
 const SUPPORTED_FORMATS_8BIT_ONLY: &[Fourcc] = &[Fourcc::Abgr8888, Fourcc::Argb8888];
 
 type UdevRenderer<'a, 'b> =
-    MultiRenderer<'a, 'a, 'b, GbmGlesBackend<GlesRenderer>, GbmGlesBackend<GlesRenderer>>;
+    MultiRenderer<'a, 'a, 'b, GbmGlesBackend<SkiaRenderer>, GbmGlesBackend<SkiaRenderer>>;
 
 #[derive(Debug, PartialEq)]
 struct UdevOutputId {
@@ -123,7 +123,7 @@ pub struct UdevData {
     dmabuf_state: Option<(DmabufState, DmabufGlobal)>,
     primary_gpu: DrmNode,
     allocator: Option<Box<dyn Allocator<Buffer = Dmabuf, Error = AnyError>>>,
-    gpus: GpuManager<GbmGlesBackend<GlesRenderer>>,
+    gpus: GpuManager<GbmGlesBackend<SkiaRenderer>>,
     backends: HashMap<DrmNode, BackendData>,
     pointer_images: Vec<(xcursor::parser::Image, TextureBuffer<MultiTexture>)>,
     pointer_element: PointerElement<MultiTexture>,
@@ -788,7 +788,7 @@ enum DeviceAddError {
 fn get_surface_dmabuf_feedback(
     primary_gpu: DrmNode,
     render_node: DrmNode,
-    gpus: &mut GpuManager<GbmGlesBackend<GlesRenderer>>,
+    gpus: &mut GpuManager<GbmGlesBackend<SkiaRenderer>>,
     composition: &SurfaceComposition,
 ) -> Option<DrmSurfaceDmabufFeedback> {
     let primary_formats = gpus
@@ -1649,7 +1649,7 @@ fn render_surface<'a, 'b>(
         output_elements(output, space, custom_elements, renderer, show_window_preview);
     let res = surface
         .compositor
-        .render_frame::<_, _, GlesTexture>(renderer, &elements, clear_color)?;
+            .render_frame::<_, _, SkiaGLesFbo>(renderer, &elements, clear_color)?;
 
     post_repaint(
         output,
@@ -1682,7 +1682,7 @@ fn initial_render(
 ) -> Result<(), SwapBuffersError> {
     surface
         .compositor
-        .render_frame::<_, CustomRenderElements<_>, GlesTexture>(renderer, &[], CLEAR_COLOR)?;
+        .render_frame::<_, CustomRenderElements<_>, SkiaGLesFbo>(renderer, &[], CLEAR_COLOR)?;
     surface.compositor.queue_frame(None, None, None)?;
     surface.compositor.reset_buffers();
 
