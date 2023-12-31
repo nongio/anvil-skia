@@ -46,8 +46,8 @@ use tracing::{error, info, warn};
 
 use crate::{
     drawing::*, render::*,
-    skia_renderer::{SkiaRenderer, SkiaTexture},
-    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData},
+    skia_renderer::{SkiaRenderer, SkiaTexture, SkiaFrame},
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, skia_drawing::SkiaElement, render_elements::custom_render_elements::CustomRenderElements,
 };
 
 pub const OUTPUT_NAME: &str = "winit";
@@ -59,6 +59,7 @@ pub struct WinitData {
     full_redraw: u8,
     #[cfg(feature = "debug")]
     pub fps: fps_ticker::Fps,
+    skia_element: SkiaElement,
 }
 
 impl DmabufHandler for AnvilState<WinitData> {
@@ -185,6 +186,8 @@ pub fn run_winit() {
         info!("EGL hardware-acceleration enabled");
     };
 
+    let skia_element = SkiaElement::new();
+
     let data = {
         let damage_tracker = OutputDamageTracker::from_output(&output);
 
@@ -193,6 +196,7 @@ pub fn run_winit() {
             damage_tracker,
             dmabuf_state,
             full_redraw: 0,
+            skia_element,
             #[cfg(feature = "debug")]
             fps: fps_ticker::Fps::default(),
         }
@@ -320,7 +324,7 @@ pub fn run_winit() {
 
                 let renderer = backend.renderer();
 
-                let mut elements = Vec::<CustomRenderElements<SkiaRenderer>>::new();
+                let mut elements = Vec::<CustomRenderElements<_>>::new();
 
                 elements.extend(pointer_element.render_elements(renderer, cursor_pos_scaled, scale, 1.0));
 
@@ -339,6 +343,9 @@ pub fn run_winit() {
 
                 #[cfg(feature = "debug")]
                 elements.push(CustomRenderElements::Fps(fps_element.clone()));
+
+                let skia_element = state.backend_data.skia_element.clone();
+                elements.push(CustomRenderElements::Skia(skia_element));
 
                 render_output(
                     &output,

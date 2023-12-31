@@ -15,7 +15,7 @@ use crate::{
     render::*,
     shell::WindowElement,
     skia_renderer::{SkiaRenderer, SkiaGLesFbo},
-    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData},
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, skia_drawing::SkiaElement, render_elements::custom_render_elements::CustomRenderElements,
 };
 #[cfg(feature = "renderer_sync")]
 use smithay::backend::drm::compositor::PrimaryPlaneElement;
@@ -108,7 +108,7 @@ const SUPPORTED_FORMATS: &[Fourcc] = &[
 ];
 const SUPPORTED_FORMATS_8BIT_ONLY: &[Fourcc] = &[Fourcc::Abgr8888, Fourcc::Argb8888];
 
-type UdevRenderer<'a, 'b> =
+pub type UdevRenderer<'a, 'b> =
     MultiRenderer<'a, 'a, 'b, GbmGlesBackend<SkiaRenderer>, GbmGlesBackend<SkiaRenderer>>;
 
 #[derive(Debug, PartialEq)]
@@ -131,6 +131,7 @@ pub struct UdevData {
     fps_texture: Option<MultiTexture>,
     pointer_image: crate::cursor::Cursor,
     debug_flags: DebugFlags,
+    skia_element: SkiaElement,
 }
 
 impl UdevData {
@@ -236,6 +237,7 @@ pub fn run_udev() {
     info!("Using {} as primary gpu.", primary_gpu);
 
     let gpus = GpuManager::new(GbmGlesBackend::with_context_priority(ContextPriority::High)).unwrap();
+    let skia_element = SkiaElement::new();
 
     let data = UdevData {
         dh: display_handle.clone(),
@@ -251,6 +253,7 @@ pub fn run_udev() {
         #[cfg(feature = "debug")]
         fps_texture: None,
         debug_flags: DebugFlags::empty(),
+        skia_element,
     };
     let mut state = AnvilState::init(display, event_loop.handle(), data, true);
 
@@ -1465,7 +1468,7 @@ impl AnvilState<UdevData> {
             // somehow we got called with an invalid output
             return;
         };
-
+    
         let result = render_surface(
             surface,
             &mut renderer,
@@ -1478,6 +1481,7 @@ impl AnvilState<UdevData> {
             &mut self.cursor_status.lock().unwrap(),
             &self.clock,
             self.show_window_preview,
+            self.backend_data.skia_element.clone(),
         );
         let reschedule = match &result {
             Ok(has_rendered) => !has_rendered,
@@ -1580,6 +1584,7 @@ fn render_surface<'a, 'b>(
     cursor_status: &mut CursorImageStatus,
     clock: &Clock<Monotonic>,
     show_window_preview: bool,
+    skia_element: SkiaElement,
 ) -> Result<bool, SwapBuffersError> {
     let output_geometry = space.output_geometry(output).unwrap();
     let scale = Scale::from(output.current_scale().fractional_scale());
@@ -1636,6 +1641,8 @@ fn render_surface<'a, 'b>(
                 }
             }
         }
+
+        custom_elements.push(CustomRenderElements::Skia(skia_element));
     }
 
     #[cfg(feature = "debug")]

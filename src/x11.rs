@@ -8,7 +8,7 @@ use std::{
 use crate::{
     drawing::*,
     render::*,
-    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData},
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, skia_renderer::SkiaRenderer,
 };
 #[cfg(feature = "egl")]
 use smithay::backend::renderer::ImportEgl;
@@ -58,7 +58,7 @@ pub struct X11Data {
     mode: Mode,
     // FIXME: If GlesRenderer is dropped before X11Surface, then the MakeCurrent call inside Gles2Renderer will
     // fail because the X11Surface is keeping gbm alive.
-    renderer: GlesRenderer,
+    renderer: SkiaRenderer,
     damage_tracker: OutputDamageTracker,
     surface: X11Surface,
     dmabuf_state: DmabufState,
@@ -173,7 +173,7 @@ pub fn run_x11() {
     };
 
     #[cfg_attr(not(feature = "egl"), allow(unused_mut))]
-    let mut renderer = unsafe { GlesRenderer::new(context) }.expect("Failed to initialize renderer");
+    let mut renderer = unsafe { SkiaRenderer::new(context) }.expect("Failed to initialize renderer");
 
     #[cfg(feature = "egl")]
     if renderer.bind_wl_display(&display.handle()).is_ok() {
@@ -325,7 +325,7 @@ pub fn run_x11() {
             }
 
             let mut cursor_guard = cursor_status.lock().unwrap();
-            let mut elements: Vec<CustomRenderElements<GlesRenderer>> = Vec::new();
+            let mut elements: Vec<CustomRenderElements<SkiaRenderer>> = Vec::new();
 
             // draw the cursor as relevant
             // reset the cursor if the surface is no longer alive
@@ -366,7 +366,7 @@ pub fn run_x11() {
             // draw the dnd icon if any
             if let Some(surface) = state.dnd_icon.as_ref() {
                 if surface.alive() {
-                    elements.extend(AsRenderElements::<GlesRenderer>::render_elements(
+                    elements.extend(AsRenderElements::<SkiaRenderer>::render_elements(
                         &smithay::desktop::space::SurfaceTree::from_surface(surface),
                         &mut backend_data.renderer,
                         cursor_pos_scaled,

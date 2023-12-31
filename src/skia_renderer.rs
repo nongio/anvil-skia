@@ -1,5 +1,3 @@
-#![feature(slice_pattern)]
-
 use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
@@ -42,7 +40,9 @@ pub struct SkiaSurface {
     pub gr_context: skia::gpu::DirectContext,
     pub surface: skia::Surface,
 }
+
 impl SkiaSurface {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_fbo(
         width: impl Into<i32>,
         height: impl Into<i32>,
@@ -152,11 +152,12 @@ pub struct SkiaTexture {
     pub has_alpha: bool,
 }
 
-pub struct SkiaFrame<'a> {
+
+#[derive(Clone)]
+pub struct SkiaFrame {
     size: Size<i32, Physical>,
-    skia_surface: &'a mut SkiaSurface,
+    pub skia_surface: skia::Surface,
     id: usize,
-    fbo: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -222,11 +223,7 @@ fn save_image(image: &skia::Image, name: &str) {
 pub trait VectorRenderer {}
 impl VectorRenderer for SkiaRenderer {}
 
-impl<'a> SkiaFrame<'a> {
-    pub fn canvas(&mut self) -> &mut skia::Canvas {
-        self.skia_surface.surface.canvas()
-    }
-}
+
 impl SkiaRenderer {
     /// # Safety
     ///
@@ -252,7 +249,7 @@ impl SkiaRenderer {
     ) -> Result<SkiaRenderer, GlesError> {
         egl.make_current()?;
         let gl_renderer = GlesRenderer::with_capabilities(egl, capabilities)?;
-        let egl = gl_renderer.egl_context();
+        // let egl = gl_renderer.egl_context();
 
         let context = skia::gpu::DirectContext::new_gl(None, None);
 
@@ -344,7 +341,7 @@ impl SkiaRenderer {
     pub fn egl_context(&self) -> &EGLContext {
         self.gl_renderer.egl_context()
     }
-    fn current_skia_renderer(&mut self) -> Option<&SkiaSurface> {
+    pub fn current_skia_renderer(&mut self) -> Option<&SkiaSurface> {
         let current_target = self.current_target.as_ref().unwrap();
 
         let renderer = self.target_renderer.get(&current_target);
@@ -442,7 +439,7 @@ impl Texture for SkiaTexture {
     }
 }
 
-impl<'a> Frame for SkiaFrame<'a> {
+impl<'a> Frame for SkiaFrame {
     type Error = GlesError;
     type TextureId = SkiaTexture;
 
@@ -460,9 +457,7 @@ impl<'a> Frame for SkiaFrame<'a> {
             damage,
             color,
         )?;
-        let skia = self.skia_surface.clone();
-        let mut surface = skia.surface();
-        surface.flush_submit_and_sync_cpu();
+        self.skia_surface.flush_submit_and_sync_cpu();
         Ok(())
     }
     fn draw_solid(
@@ -498,8 +493,7 @@ impl<'a> Frame for SkiaFrame<'a> {
         let mut paint = skia::Paint::new(color, None);
         paint.set_blend_mode(skia::BlendMode::Src);
 
-        let skia = self.skia_surface.clone();
-        let mut surface = skia.surface();
+        let mut surface = self.skia_surface.clone();
 
         for rect in instances.iter() {
             let canvas = surface.canvas();
@@ -517,8 +511,8 @@ impl<'a> Frame for SkiaFrame<'a> {
         transform: Transform,
         alpha: f32,
     ) -> Result<(), Self::Error> {
-        let skia = self.skia_surface.clone();
 
+        
         let instances = damage
             .iter()
             .map(|rect| {
@@ -548,7 +542,9 @@ impl<'a> Frame for SkiaFrame<'a> {
         paint.set_blend_mode(skia::BlendMode::SrcOver);
 
         let mut matrix = skia::Matrix::new_identity();
-        let mut surface = skia.surface();
+
+        
+        let mut surface = self.skia_surface.clone();
 
         let canvas = surface.canvas();
         let scale_x = dst.size.w as f32 / src.size.w as f32;
@@ -606,9 +602,7 @@ impl<'a> Frame for SkiaFrame<'a> {
         Transform::Normal
     }
     fn finish(self) -> Result<SyncPoint, Self::Error> {
-        let skia = self.skia_surface;
-        let mut surface = skia.surface();
-
+        let mut surface = self.skia_surface;
         surface.flush_submit_and_sync_cpu();
 
         Ok(SyncPoint::signaled())
@@ -618,7 +612,7 @@ impl<'a> Frame for SkiaFrame<'a> {
 impl Renderer for SkiaRenderer {
     type Error = GlesError;
     type TextureId = SkiaTexture;
-    type Frame<'a> = SkiaFrame<'a>;
+    type Frame<'a> = SkiaFrame;
 
     fn id(&self) -> usize {
         99
@@ -639,14 +633,13 @@ impl Renderer for SkiaRenderer {
     fn render(
         &mut self,
         output_size: Size<i32, Physical>,
-        dst_transform: Transform,
+        _dst_transform: Transform,
     ) -> Result<Self::Frame<'_>, Self::Error> {
         let id = self.id();
-
         let current_target = self.current_target.as_ref().unwrap();
         let buffer = self.buffers.get(current_target).unwrap();
 
-        let renderer = self
+        self
             .target_renderer
             .entry(current_target.clone())
             .or_insert_with(|| {
@@ -684,11 +677,11 @@ impl Renderer for SkiaRenderer {
             }
             self.gl.BindFramebuffer(ffi::FRAMEBUFFER, 0);
         }
+        let surface = self.target_renderer.get_mut(&self.current_target.as_ref().unwrap()).unwrap();
 
         Ok(SkiaFrame {
+            skia_surface: surface.surface(),
             size: output_size,
-            skia_surface: renderer,
-            fbo: buffer.fbo,
             id,
         })
     }
@@ -750,16 +743,14 @@ impl SkiaRenderer {
                 texture_info,
             );
 
-            let image = skia::Image::from_texture(
+            skia::Image::from_texture(
                 context,
                 &texture,
                 skia::gpu::SurfaceOrigin::TopLeft,
                 skia::ColorType::RGBA8888,
                 skia::AlphaType::Premul,
                 None,
-            );
-            // save_image(&image.clone().unwrap(), "import_image");
-            image
+            )
         }
     }
     fn import_skia_image_from_raster_data(
@@ -770,32 +761,30 @@ impl SkiaRenderer {
     ) -> Option<skia::Image> {
         let size = skia::ISize::new(size.w, size.h);
 
-        unsafe {
-            let color_type = match format {
-                Fourcc::Argb8888 => skia::ColorType::BGRA8888,
-                Fourcc::Abgr8888 => skia::ColorType::RGBA8888,
-                Fourcc::Abgr2101010 => skia::ColorType::RGBA1010102,
-                _ => skia::ColorType::RGBA8888,
-            };
-            let info = skia::ImageInfo::new(size, color_type, skia::AlphaType::Premul, None);
-            let pixmap = skia::Pixmap::new(&info, data, size.width as usize * 4);
-            let context = self.context.as_mut().unwrap();
+        let color_type = match format {
+            Fourcc::Argb8888 => skia::ColorType::BGRA8888,
+            Fourcc::Abgr8888 => skia::ColorType::RGBA8888,
+            Fourcc::Abgr2101010 => skia::ColorType::RGBA1010102,
+            _ => skia::ColorType::RGBA8888,
+        };
+        let info = skia::ImageInfo::new(size, color_type, skia::AlphaType::Premul, None);
+        let pixmap = skia::Pixmap::new(&info, data, size.width as usize * 4);
+        let context = self.context.as_mut().unwrap();
 
-            let image =
-                skia::Image::new_cross_context_from_pixmap(context, &pixmap, true, Some(true))
-                    .unwrap();
-            image.clone().flush_and_submit(context);
+        let image =
+            skia::Image::new_cross_context_from_pixmap(context, &pixmap, true, Some(true))
+                .unwrap();
+        image.clone().flush_and_submit(context);
 
-            image.new_texture_image(context, skia::gpu::MipMapped::Yes)
-        }
+        image.new_texture_image(context, skia::gpu::MipMapped::Yes)
     }
 }
 impl ImportMemWl for SkiaRenderer {
     fn import_shm_buffer(
         &mut self,
         buffer: &WlBuffer,
-        surface: Option<&SurfaceData>,
-        damage: &[Rectangle<i32, Buffer>],
+        _surface: Option<&SurfaceData>,
+        _damage: &[Rectangle<i32, Buffer>],
     ) -> Result<<Self as Renderer>::TextureId, <Self as Renderer>::Error> {
         with_buffer_contents(
             buffer,
@@ -803,7 +792,7 @@ impl ImportMemWl for SkiaRenderer {
                 let offset = data.offset;
                 let width = data.width;
                 let height = data.height;
-                let stride = data.stride;
+                // let stride = data.stride;
 
                 let size = Size::<i32, Buffer>::from((width, height));
 
@@ -1055,7 +1044,7 @@ impl ExportMem for SkiaRenderer {
     }
     fn copy_texture(
         &mut self,
-        texture: &Self::TextureId,
+        _texture: &Self::TextureId,
         region: Rectangle<i32, Buffer>,
         fourcc: Fourcc,
     ) -> Result<Self::TextureMapping, Self::Error> {
@@ -1203,5 +1192,11 @@ impl Offscreen<SkiaGLesFbo> for SkiaRenderer {
     ) -> Result<SkiaGLesFbo, GlesError> {
         let lfbo = self.create_texture_and_framebuffer(size.w, size.h, format);
         Ok(lfbo)
+    }
+}
+
+impl AsRef<SkiaFrame> for SkiaFrame {
+    fn as_ref(&self) -> &SkiaFrame {
+        self
     }
 }
