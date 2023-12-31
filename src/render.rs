@@ -2,75 +2,25 @@ use smithay::{
     backend::renderer::{
         damage::{Error as OutputDamageTrackerError, OutputDamageTracker, RenderOutputResult},
         element::{
-            surface::WaylandSurfaceRenderElement,
             utils::{
                 ConstrainAlign, ConstrainScaleBehavior, CropRenderElement, RelocateRenderElement,
                 RescaleRenderElement,
             },
-            AsRenderElements, RenderElement, Wrap,
+            AsRenderElements, Wrap,
         },
         ImportAll, ImportMem, Renderer,
     },
     desktop::space::{
-        constrain_space_element, ConstrainBehavior, ConstrainReference, Space, SpaceRenderElements,
+        constrain_space_element, ConstrainBehavior, ConstrainReference, Space,
     },
     output::Output,
     utils::{Point, Rectangle, Size},
 };
 
-#[cfg(feature = "debug")]
-use crate::drawing::FpsElement;
 use crate::{
-    drawing::{PointerRenderElement, CLEAR_COLOR, CLEAR_COLOR_FULLSCREEN},
-    shell::{FullscreenSurface, WindowElement, WindowRenderElement},
+    drawing::{CLEAR_COLOR, CLEAR_COLOR_FULLSCREEN},
+    shell::{FullscreenSurface, WindowElement, WindowRenderElement}, render_elements::{custom_render_elements::CustomRenderElements, output_render_elements::OutputRenderElements}, skia_drawing::SkiaElement,
 };
-
-smithay::backend::renderer::element::render_elements! {
-    pub CustomRenderElements<R> where
-        R: ImportAll + ImportMem;
-    Pointer=PointerRenderElement<R>,
-    Surface=WaylandSurfaceRenderElement<R>,
-    #[cfg(feature = "debug")]
-    // Note: We would like to borrow this element instead, but that would introduce
-    // a feature-dependent lifetime, which introduces a lot more feature bounds
-    // as the whole type changes and we can't have an unused lifetime (for when "debug" is disabled)
-    // in the declaration.
-    Fps=FpsElement<<R as Renderer>::TextureId>,
-}
-
-impl<R: Renderer> std::fmt::Debug for CustomRenderElements<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Pointer(arg0) => f.debug_tuple("Pointer").field(arg0).finish(),
-            Self::Surface(arg0) => f.debug_tuple("Surface").field(arg0).finish(),
-            #[cfg(feature = "debug")]
-            Self::Fps(arg0) => f.debug_tuple("Fps").field(arg0).finish(),
-            Self::_GenericCatcher(arg0) => f.debug_tuple("_GenericCatcher").field(arg0).finish(),
-        }
-    }
-}
-
-smithay::backend::renderer::element::render_elements! {
-    pub OutputRenderElements<R, E> where R: ImportAll + ImportMem;
-    Space=SpaceRenderElements<R, E>,
-    Window=Wrap<E>,
-    Custom=CustomRenderElements<R>,
-    Preview=CropRenderElement<RelocateRenderElement<RescaleRenderElement<WindowRenderElement<R>>>>,
-}
-
-impl<R: Renderer + ImportAll + ImportMem, E: RenderElement<R> + std::fmt::Debug> std::fmt::Debug
-    for OutputRenderElements<R, E>
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Space(arg0) => f.debug_tuple("Space").field(arg0).finish(),
-            Self::Window(arg0) => f.debug_tuple("Window").field(arg0).finish(),
-            Self::Custom(arg0) => f.debug_tuple("Custom").field(arg0).finish(),
-            Self::Preview(arg0) => f.debug_tuple("Preview").field(arg0).finish(),
-            Self::_GenericCatcher(arg0) => f.debug_tuple("_GenericCatcher").field(arg0).finish(),
-        }
-    }
-}
 
 pub fn space_preview_elements<'a, R, C>(
     renderer: &'a mut R,
@@ -136,13 +86,13 @@ where
 }
 
 #[profiling::function]
-pub fn output_elements<R>(
+pub fn output_elements<'frame, R>(
     output: &Output,
     space: &Space<WindowElement>,
-    custom_elements: impl IntoIterator<Item = CustomRenderElements<R>>,
+    custom_elements: impl IntoIterator<Item = CustomRenderElements<'frame, R>>,
     renderer: &mut R,
     show_window_preview: bool,
-) -> (Vec<OutputRenderElements<R, WindowRenderElement<R>>>, [f32; 4])
+) -> (Vec<OutputRenderElements<'frame, R, WindowRenderElement<R>>>, [f32; 4])
 where
     R: Renderer + ImportAll + ImportMem,
     R::TextureId: Clone + 'static,
@@ -190,18 +140,19 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_output<R>(
+pub fn render_output<'frame, R>(
     output: &Output,
     space: &Space<WindowElement>,
-    custom_elements: impl IntoIterator<Item = CustomRenderElements<R>>,
+    custom_elements: impl IntoIterator<Item = CustomRenderElements<'frame, R>>,
     renderer: &mut R,
     damage_tracker: &mut OutputDamageTracker,
     age: usize,
     show_window_preview: bool,
 ) -> Result<RenderOutputResult, OutputDamageTrackerError<R>>
 where
-    R: Renderer + ImportAll + ImportMem,
+    R: Renderer + ImportAll + ImportMem + 'frame,
     R::TextureId: Clone + 'static,
+    SkiaElement: smithay::backend::renderer::element::RenderElement<R>,
 {
     let (elements, clear_color) =
         output_elements(output, space, custom_elements, renderer, show_window_preview);
