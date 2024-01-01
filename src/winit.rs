@@ -46,8 +46,8 @@ use tracing::{error, info, warn};
 
 use crate::{
     drawing::*, render::*,
-    skia_renderer::{SkiaRenderer, SkiaTexture, SkiaFrame},
-    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, skia_drawing::SkiaElement, render_elements::custom_render_elements::CustomRenderElements,
+    skia_renderer::{SkiaRenderer, SkiaTexture},
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, render_elements::{custom_render_elements::CustomRenderElements, skia_element::SkiaElement},
 };
 
 pub const OUTPUT_NAME: &str = "winit";

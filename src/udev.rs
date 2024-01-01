@@ -9,13 +9,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::state::SurfaceDmabufFeedback;
+use crate::{state::SurfaceDmabufFeedback, render_elements::skia_element::SkiaElement};
 use crate::{
     drawing::*,
     render::*,
     shell::WindowElement,
     skia_renderer::{SkiaRenderer, SkiaGLesFbo},
-    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, skia_drawing::SkiaElement, render_elements::custom_render_elements::CustomRenderElements,
+    state::{post_repaint, take_presentation_feedback, AnvilState, Backend, CalloopData}, render_elements::custom_render_elements::CustomRenderElements,
 };
 #[cfg(feature = "renderer_sync")]
 use smithay::backend::drm::compositor::PrimaryPlaneElement;

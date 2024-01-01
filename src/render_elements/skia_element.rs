@@ -1,5 +1,4 @@
 
-use skia_safe::{Color4f, Paint, image_filters::{blur, CropRect}, canvas::SaveLayerRec};
 use smithay::{
     backend::renderer::{
         element::{Element, Id, RenderElement},
@@ -9,7 +8,7 @@ use smithay::{
     utils::{Buffer, Physical, Point, Rectangle, Scale},
 };
 
-use crate::{skia_renderer::SkiaRenderer, udev::UdevRenderer};
+use crate::{skia_renderer::{SkiaRenderer, SkiaFrame}, udev::UdevRenderer};
 
 #[derive(Debug, Clone)]
 pub struct SkiaElement {
@@ -120,17 +119,17 @@ fn draw(
                 skia_safe::Point::new(radius, radius),
             ],
         );
-        let background_color = Color4f::new(0.4, 0.4, 0.4, 0.3);
-        let mut background_paint = Paint::new(background_color, None);
+        let background_color = skia_safe::Color4f::new(0.4, 0.4, 0.4, 0.3);
+        let mut background_paint = skia_safe::Paint::new(background_color, None);
         background_paint.set_anti_alias(true);
         background_paint.set_style(skia_safe::PaintStyle::Fill);
     
-        let mut save_layer_rec = SaveLayerRec::default();
-        let blur = blur(
+        let mut save_layer_rec = skia_safe::canvas::SaveLayerRec::default();
+        let blur = skia_safe::image_filters::blur(
             (20.0, 20.0),
             skia_safe::TileMode::Clamp,
             None,
-            Some(CropRect::from(bounds)),
+            Some(skia_safe::image_filters::CropRect::from(bounds)),
         )
         .unwrap();
         
@@ -170,4 +169,3 @@ impl<'renderer, 'alloc> RenderElement<UdevRenderer<'renderer, 'alloc>> for SkiaE
         })
     }
 }
-

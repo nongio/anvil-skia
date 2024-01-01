@@ -17,7 +17,6 @@ pub mod render;
 pub mod shell;
 pub mod render_elements;
 pub mod skia_renderer;
-pub mod skia_drawing;
 pub mod state;
 #[cfg(feature = "udev")]
 pub mod udev;

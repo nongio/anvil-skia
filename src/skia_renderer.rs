@@ -1200,3 +1200,9 @@ impl AsRef<SkiaFrame> for SkiaFrame {
         self
     }
 }
+
+impl AsMut<SkiaFrame> for SkiaFrame {
+    fn as_mut(&mut self) -> &mut SkiaFrame {
+        self
+    }
+}
